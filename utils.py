@@ -2,8 +2,10 @@ import pandas as pd
 import yfinance as yf
 import os 
 from fredapi import Fred
-API_KEY='c73684ead935d3557c5d7a2b119f903a'
-fred = Fred(api_key=API_KEY)
+import ta
+with open(r'C:\Users\user\OneDrive - Universidad de Oviedo\Escritorio\UNI\3ºAÑO\LAB_IACD\Proyecto_2_Lab_IACD\api_key.txt', 'r') as file:
+    api_key = file.read().strip()
+fred = Fred(api_key)
 
 def extract_sp500_companies(url = "https://es.wikipedia.org/wiki/Anexo:Compa%C3%B1%C3%ADas_del_S%26P_500" , export = True) : 
     # Leer todas las tablas de la página
@@ -21,7 +23,7 @@ def extract_stock(stock_symbol, start_date = "2010-01-01", end_date = "2024-01-3
         return None
     return data
 
-def process_data(raw_data):
+def process_data(raw_data,macro):
     """
     Procesa datos de acciones eliminando las primeras líneas no relevantes
     y configurando las columnas adecuadas.
@@ -63,13 +65,8 @@ def join_stock_data(folder=r"data/stocks", output=r"data/final_dataset.csv",expo
         final_dataset.to_csv(output, index=False)
     return final_dataset
 
-def extract_macroeconomics(series,start_date = "2010-01-01", end_date = "2024-01-31"):
-    if series in [ '^GSPC','^IXIC','^RUT',    '^STOXX50E',    '^FTSE',    'CL=F',    'SI=F',
-    'GC=F',
-    '^HSI',
-    'NG=F',
-    'ZC=F',
-    'EURUSD=X']:
+def extract_macroeconomics(series,start_date = "2010-01-01", end_date = "2023-12-31"):
+    if series in ['^GSPC','^IXIC','^RUT','^STOXX50E','^FTSE','CL=F','SI=F','GC=F','^HSI','NG=F','ZC=F','EURUSD=X','BTC-USD']:
             raw_macro_data=extract_stock(series,start_date,end_date)
             if raw_macro_data is not None : 
                 raw_macro_data.to_csv(f"data/raw_macro/{series}.csv")
@@ -95,8 +92,8 @@ def join_macro(series_ids,start,end):
     for series in series_ids: 
         try:
             data=extract_macroeconomics(series,start,end)
-        except: 
-            print(f'Serie {series} ha fallado')
+        except Exception as error :
+            print(f'Serie {series}  {error}')
         data['Date']=pd.to_datetime(data['Date']).dt.tz_localize(None) 
         dataframes.append(data)
     # Eliminar duplicados en cada DataFrame antes de concatenar
@@ -124,3 +121,44 @@ def join_macro(series_ids,start,end):
     # Mostrar resultado
     final_df.to_csv(f"data/macro_data.csv")
     return final_df
+
+def get_technical_indicators(group):
+     
+    group = group.sort_values(by='Date')  # Asegúrate de que los datos estén ordenados por fecha
+
+    # MACD (Moving Average Convergence Divergence)
+    group['MACD'] = ta.trend.macd(group['Close'])
+    
+    # CCI (Commodity Channel Index)
+    group['CCI'] = ta.trend.cci(group['High'], group['Low'], group['Close'], window=20)
+    
+    # ATR (Average True Range)
+    group['ATR'] = ta.volatility.average_true_range(group['High'], group['Low'], group['Close'], window=14)
+    
+    # Bollinger Bands
+    group['BOLL_upper'] = ta.volatility.bollinger_hband(group['Close'], window=20)
+    group['BOLL_lower'] = ta.volatility.bollinger_lband(group['Close'], window=20)
+    
+    # EMA20 (20-day Exponential Moving Average)
+    group['EMA20'] = ta.trend.ema_indicator(group['Close'], window=20)
+    
+    # MA5/MA10 (5/10-day Moving Averages)
+    group['MA5'] = group['Close'].rolling(window=5).mean()
+    group['MA10'] = group['Close'].rolling(window=10).mean()
+    
+    # MTM6/MTM12 (6/12-Month Momentum)
+    group['MTM6'] = group['Close'].pct_change(periods=6)
+    group['MTM12'] = group['Close'].pct_change(periods=12)
+    
+    # ROC (Rate of Change)
+    group['ROC'] = ta.momentum.roc(group['Close'], window=12)
+    
+    # SMI (Stochastic Momentum Index)
+    group['SMI'] = ta.momentum.stoch_signal(group['High'], group['Low'], group['Close'], window=14, smooth_window=3)
+    
+    # WVAD (Williams Variable Accumulation/Distribution)
+    group['WVAD'] = ((group['Close'] - group['Open']) / (group['High'] - group['Low']) * group['Volume']).fillna(0)
+
+    group['RSI'] = ta.momentum.rsi(group['Close'], window=20)
+    group=group.fillna(method='ffill').fillna(method='bfill')
+    return group
