@@ -66,7 +66,7 @@ def join_stock_data(folder=r"data/stocks", output=r"data/final_dataset.csv",expo
     return final_dataset
 
 def extract_macroeconomics(series,start_date = "2010-01-01", end_date = "2023-12-31"):
-    if series in ['^GSPC','^IXIC','^RUT','^STOXX50E','^FTSE','CL=F','SI=F','GC=F','^HSI','NG=F','ZC=F','EURUSD=X','BTC-USD']:
+    if series in ['^GSPC','^IXIC','^RUT','^STOXX50E','^FTSE','CL=F','SI=F','GC=F','^HSI','NG=F','ZC=F','EURUSD=X','BTC-USD','HO=F','ZC=F']:
             raw_macro_data=extract_stock(series,start_date,end_date)
             if raw_macro_data is not None : 
                 raw_macro_data.to_csv(f"data/raw_macro/{series}.csv")
@@ -122,43 +122,46 @@ def join_macro(series_ids,start,end):
     final_df.to_csv(f"data/macro_data.csv")
     return final_df
 
-def get_technical_indicators(group):
-     
+def get_technical_indicators(group,symbol):
+    
+    df=pd.DataFrame()
+
     group = group.sort_values(by='Date')  # Asegúrate de que los datos estén ordenados por fecha
 
     # MACD (Moving Average Convergence Divergence)
-    group['MACD'] = ta.trend.macd(group['Close'])
+    df[f'MACD_{symbol}'] = ta.trend.macd(group['Close'])
     
     # CCI (Commodity Channel Index)
-    group['CCI'] = ta.trend.cci(group['High'], group['Low'], group['Close'], window=20)
+    df[f'CCI_{symbol}'] = ta.trend.cci(group['High'], group['Low'], group['Close'], window=20)
     
     # ATR (Average True Range)
-    group['ATR'] = ta.volatility.average_true_range(group['High'], group['Low'], group['Close'], window=14)
+    df[f'ATR_{symbol}'] = ta.volatility.average_true_range(group['High'], group['Low'], group['Close'], window=14)
     
     # Bollinger Bands
-    group['BOLL_upper'] = ta.volatility.bollinger_hband(group['Close'], window=20)
-    group['BOLL_lower'] = ta.volatility.bollinger_lband(group['Close'], window=20)
+    df[f'BOLL_upper_{symbol}'] = ta.volatility.bollinger_hband(group['Close'], window=20)
+    df[f'BOLL_lower_{symbol}'] = ta.volatility.bollinger_lband(group['Close'], window=20)
     
     # EMA20 (20-day Exponential Moving Average)
-    group['EMA20'] = ta.trend.ema_indicator(group['Close'], window=20)
+    df[f'EMA20_{symbol}'] = ta.trend.ema_indicator(group['Close'], window=20)
     
     # MA5/MA10 (5/10-day Moving Averages)
-    group['MA5'] = group['Close'].rolling(window=5).mean()
-    group['MA10'] = group['Close'].rolling(window=10).mean()
+    df[f'MA5_{symbol}'] = group['Close'].rolling(window=5).mean()
+    df[f'MA10_{symbol}'] = group['Close'].rolling(window=10).mean()
     
     # MTM6/MTM12 (6/12-Month Momentum)
-    group['MTM6'] = group['Close'].pct_change(periods=6)
-    group['MTM12'] = group['Close'].pct_change(periods=12)
+    df[f'MTM6_{symbol}'] = group['Close'].pct_change(periods=6)
+    df[f'MTM12_{symbol}'] = group['Close'].pct_change(periods=12)
     
     # ROC (Rate of Change)
-    group['ROC'] = ta.momentum.roc(group['Close'], window=12)
+    df[f'ROC_{symbol}'] = ta.momentum.roc(group['Close'], window=12)
     
     # SMI (Stochastic Momentum Index)
-    group['SMI'] = ta.momentum.stoch_signal(group['High'], group['Low'], group['Close'], window=14, smooth_window=3)
+    df[f'SMI_{symbol}'] = ta.momentum.stoch_signal(group['High'], group['Low'], group['Close'], window=14, smooth_window=3)
     
     # WVAD (Williams Variable Accumulation/Distribution)
-    group['WVAD'] = ((group['Close'] - group['Open']) / (group['High'] - group['Low']) * group['Volume']).fillna(0)
+    df[f'WVAD_{symbol}'] = ((group['Close'] - group['Open']) / (group['High'] - group['Low']) * group['Volume']).fillna(0)
 
-    group['RSI'] = ta.momentum.rsi(group['Close'], window=20)
-    group=group.fillna(method='ffill').fillna(method='bfill')
-    return group
+    df[f'RSI_{symbol}'] = ta.momentum.rsi(group['Close'], window=20)
+    df=group.fillna(method='ffill').fillna(method='bfill')
+    print(df)
+    return df
