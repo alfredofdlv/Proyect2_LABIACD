@@ -3,6 +3,12 @@ import yfinance as yf
 import os 
 from fredapi import Fred
 import ta
+from sklearn.preprocessing import StandardScaler
+from sklearn.decomposition import PCA, IncrementalPCA
+import numpy as np
+import matplotlib.pyplot as plt
+from datetime import datetime
+
 with open(r'C:\Users\user\OneDrive - Universidad de Oviedo\Escritorio\UNI\3ºAÑO\LAB_IACD\Proyecto_2_Lab_IACD\api_key.txt', 'r') as file:
     api_key = file.read().strip()
 fred = Fred(api_key)
@@ -23,7 +29,7 @@ def extract_stock(stock_symbol, start_date = "2010-01-01", end_date = "2024-01-3
         return None
     return data
 
-def process_data(raw_data,macro):
+def process_data(raw_data):
     """
     Procesa datos de acciones eliminando las primeras líneas no relevantes
     y configurando las columnas adecuadas.
@@ -103,9 +109,9 @@ def extract_macroeconomics(series,start_date = "2010-01-01", end_date = "2024-01
             raw_macro_data=extract_stock(series,start_date,end_date)
             if raw_macro_data is not None : 
                 raw_macro_data.to_csv(f"data/raw_macro/{series}.csv")
-                macro_data = process_data(f"data/raw_macro/{series}.csv",macro=True)
-                macro_data=macro_data[['Date','AdjustedClose']]
-                macro_data.rename(columns={'AdjustedClose':f'{series}'},inplace=True)
+                macro_data = process_data(f"data/raw_macro/{series}.csv")
+                macro_data=macro_data[['Date','Close']]
+                macro_data.rename(columns={'Close':f'{series}'},inplace=True)
                 
     else: 
             # Obtener la serie 
@@ -221,7 +227,7 @@ def get_technical_indicators(group, symbol, vertical=True):
     df.ffill(inplace=True)
     return df
 
-def join_technical_indicators(database, export=True, axis=True): 
+def join_technical_indicators(database,folder = r"data/stocks", export=True, axis=True): 
     """
     Genera indicadores técnicos y une los datos en un único DataFrame, excluyendo columnas originales como Close, High, etc.
     
@@ -234,7 +240,7 @@ def join_technical_indicators(database, export=True, axis=True):
         pd.DataFrame: DataFrame con indicadores técnicos.
     """
     dataframe = []
-    folder = r"data/stocks"
+    
     date_file = None
 
     for stock_data in os.listdir(folder):
@@ -266,4 +272,143 @@ def join_technical_indicators(database, export=True, axis=True):
     return final_df
 
 
-     
+
+
+def preprocess_and_pca(X_train, X_test, target_keyword="Close", exclude_keyword="Adjusted", show_plot=True):
+    """
+    Realiza la preprocesamiento y PCA en un conjunto de datos.
+
+    Args:
+        X_train (DataFrame): Datos de entrenamiento.
+        X_test (DataFrame): Datos de prueba.
+        show_plot (bool): Si True, muestra un gráfico de varianza explicada acumulada.
+
+    Returns:
+        tuple: X_train_pca, X_test, varianza_acumulada
+    """
+    print("Inicio del preprocesamiento y PCA...")
+
+
+
+    # Escalar los datos
+    scaler = StandardScaler()
+    X_train = scaler.fit_transform(X_train)
+    X_test = scaler.transform(X_test)
+
+    # Calcular PCA temporal para determinar componentes necesarios
+    print("Hora antes del PCA:", datetime.now().time())
+    pca_temp = PCA(n_components=0.975)
+    pca_temp.fit(X_train)
+
+    # Determinar componentes según el criterio de Kaiser
+    autovalores = pca_temp.explained_variance_
+    media_autovalores = np.mean(autovalores)
+
+    criterio_kaiser_cov = autovalores > media_autovalores
+    criterio_kaiser_cor = autovalores > 1
+    print(f"Número de componentes según criterio de Kaiser (covarianza): {np.sum(criterio_kaiser_cov)}")
+    print(f"Número de componentes según criterio de Kaiser (correlación): {np.sum(criterio_kaiser_cor)}")
+
+    # Aplicar Incremental PCA con número óptimo de componentes
+    ipca = IncrementalPCA(n_components=np.sum(criterio_kaiser_cor))
+    # ipca = IncrementalPCA(n_components=3)
+
+    X_train_pca = ipca.fit_transform(X_train)
+    varianza_explicada = ipca.explained_variance_ratio_
+    varianza_acumulada = np.cumsum(varianza_explicada)
+
+    print("Hora después del PCA:", datetime.now().time())
+
+    # Mostrar gráfico si se solicita
+    if show_plot:
+        plt.figure(figsize=(8, 5))
+        plt.plot(range(1, len(varianza_acumulada) + 1), varianza_acumulada, marker='o', linestyle='--')
+        plt.title('Varianza Explicada Acumulada')
+        plt.xlabel('Número de Componentes Principales')
+        plt.ylabel('Varianza Explicada Acumulada')
+        plt.grid(True)
+        plt.show()
+
+    return X_train_pca, X_test, varianza_acumulada
+
+def mean_positive_error(y_true, y_pred):
+    """
+    Calcula el Mean Positive Error (MPE).
+    Args:
+        y_true: Valores reales (numpy array o pandas DataFrame)
+        y_pred: Valores predichos (numpy array o pandas DataFrame)
+    Returns:
+        Mean Positive Error (MPE)
+    """
+    errors = np.maximum(y_pred - y_true, 0)  # max(Y_hat - Y, 0)
+    mpe = np.mean(errors)  # Promedio de los errores positivos
+    return mpe
+
+def transformar_a_tensor_3d(df, empresas, columnas_macro):
+    """
+    Convierte un DataFrame en un tensor 3D (Tiempo * Empresas * Características).
+    """
+    fechas = df['Date'].unique()
+    num_fechas = len(fechas)
+    num_empresas = len(empresas)
+    num_caracteristicas_empresa = max(len([col for col in df.columns if col.endswith(f"_{empresa}")]) for empresa in empresas)
+    
+    num_caracteristicas_macro = len(columnas_macro)
+    num_caracteristicas_total = num_caracteristicas_empresa + num_caracteristicas_macro
+
+    print('Num Empresas',num_empresas)
+    print('Num Fechas ', num_fechas)
+    print('Num Características Empresa',num_caracteristicas_empresa )
+    print('Num Características Macro',num_caracteristicas_macro)
+
+    # Inicializar el tensor
+    tensor = np.zeros((num_fechas, num_empresas, num_caracteristicas_total))
+    
+
+
+    # Llenar el tensor
+
+    for t, fecha in enumerate(fechas):
+        df_fecha = df[df['Date'] == fecha]
+        # Variables macroeconómicas para la fecha actual
+        macro_vals = df_fecha[columnas_macro].iloc[0].values if not df_fecha.empty else np.zeros(num_caracteristicas_macro)
+        print('Fecha actual',fecha)
+
+        for i, empresa in enumerate(empresas):
+            # Columnas específicas de la empresa
+            cols_empresa = sorted([col for col in df.columns if col.endswith(f"_{empresa}")])
+            adjusted_close_index = [i for i, col in enumerate(cols_empresa) if "AdjustedClose" in col]
+            cols_empresa = (
+                [cols_empresa.pop(adjusted_close_index[0])] + cols_empresa
+                if adjusted_close_index
+                else cols_empresa
+            )
+
+            datos_empresa = df_fecha[cols_empresa].values.flatten() if not df_fecha.empty else np.zeros(len(cols_empresa))
+            # Combinar datos de empresa y variables macroeconómicas
+            datos_combinados = np.concatenate([datos_empresa, macro_vals])
+            tensor[t, i, :] = datos_combinados
+    
+    return tensor
+
+
+def crear_ventanas_temporales(tensor, ventana, horizonte):
+    """
+    Crear ventanas temporales utilizando únicamente la característica AdjustedClose.
+    
+    tensor: tensor 3D (tiempo, empresas, características).
+    ventana: tamaño de la ventana de tiempo.
+    horizonte: horizonte de predicción.
+    
+    Retorna:
+    - X: tensor 3D de características para la ventana de tiempo.
+    - y: matriz con el valor de AdjustedClose para el horizonte predicho.
+    """
+    X = []
+    y = []
+    for t in range(ventana, tensor.shape[0] - horizonte):
+        # Extraer la ventana temporal
+        X.append(tensor[t - ventana:t, :, :])  # Mantén todas las características en X
+        # Seleccionar únicamente AdjustedClose para y (primer columna de características)
+        y.append(tensor[t + horizonte, :, 0])  # Supone que AdjustedClose está en la primera posición
+    return np.array(X), np.array(y)
