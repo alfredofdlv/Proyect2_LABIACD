@@ -14,7 +14,7 @@ class GeneticAlgorithm:
         tournament_size=4,
         crossover_prob=0.9,
         mutation_prob=0.02,
-        num_mutations = 1,
+        num_mutations=1,
         elitism=False,
         max_time=60,
         max_gen=2000000000,
@@ -52,12 +52,13 @@ class GeneticAlgorithm:
         columns = ["Date"] + [str(i) for i in range(1, num_stocks + 1)]
         df = pd.DataFrame(data, columns=columns)
         return df
-    
-        
-    def generate_chromosome_randomized_with_restrictions(self,n_assets=500, n_days=31):
+
+    def generate_chromosome_randomized_with_restrictions(self, n_assets=500, n_days=31):
         valid = False
         while not valid:
-            chromosome = np.zeros((n_assets, n_days), dtype=int)  # Initialize chromosome with 0
+            chromosome = np.zeros(
+                (n_assets, n_days), dtype=int
+            )  # Initialize chromosome with 0
             total_capital = self.initial_capital  # Initial capital
             stocks_held = np.zeros(n_assets, dtype=int)  # Stocks held for each asset
 
@@ -68,7 +69,7 @@ class GeneticAlgorithm:
                 for asset in random_asset_order:
                     # Current asset price on the given day
                     asset_price = self.january.iloc[day, asset]
-                    
+
                     # Probability of each action (hold, buy, sell)
                     action_prob = np.random.rand()
 
@@ -77,40 +78,55 @@ class GeneticAlgorithm:
                         continue  # Do nothing
                     # Buy action (33% probability)
                     elif action_prob < 2 / 3:
-                        if total_capital >= asset_price:  # Only buy if we have enough capital
+                        if (
+                            total_capital >= asset_price
+                        ):  # Only buy if we have enough capital
                             max_buy = total_capital // asset_price  # Maximum we can buy
-                            #max_buy = max(1, int(np.log(max_buy)))  # Ensure minimum of 1
-                            
-                            quantity = np.random.randint(1, max_buy + 1)  # Random buy quantity
+                            # max_buy = max(1, int(np.log(max_buy)))  # Ensure minimum of 1
+
+                            quantity = np.random.randint(
+                                1, max_buy + 1
+                            )  # Random buy quantity
                             chromosome[asset, day] = quantity  # Record buy action
                             stocks_held[asset] += quantity  # Update held stocks
                             total_capital -= quantity * asset_price  # Deduct capital
                     # Sell action (33% probability)
                     else:
                         if stocks_held[asset] > 0:  # Only sell if we own stocks
-                            max_sell = stocks_held[asset]  # Cannot sell more than we own
-                            quantity = np.random.randint(1, max_sell + 1)  # Random sell quantity
+                            max_sell = stocks_held[
+                                asset
+                            ]  # Cannot sell more than we own
+                            quantity = np.random.randint(
+                                1, max_sell + 1
+                            )  # Random sell quantity
                             chromosome[asset, day] = -quantity  # Record sell action
                             stocks_held[asset] -= quantity  # Update held stocks
-                            total_capital += quantity * asset_price  # Add capital from sale
+                            total_capital += (
+                                quantity * asset_price
+                            )  # Add capital from sale
 
             # Ensure all remaining stocks are sold on the last day
             for asset in range(n_assets):
                 if stocks_held[asset] > 0:  # If there are remaining stocks
-                    last_day_price = self.january.iloc[n_days - 1, asset]  # Price on the last day
-                    
-                    chromosome[asset, n_days - 1] -= stocks_held[asset]  # Sell all remaining stocks
-                    #print(f"chromosome[asset, n_days - 1] : {chromosome[asset, n_days - 1]} = -stocks_held[asset] : {-stocks_held[asset]} ")
-                    total_capital += stocks_held[asset] * last_day_price  # Update total capital
+                    last_day_price = self.january.iloc[
+                        n_days - 1, asset
+                    ]  # Price on the last day
+
+                    chromosome[asset, n_days - 1] -= stocks_held[
+                        asset
+                    ]  # Sell all remaining stocks
+                    # print(f"chromosome[asset, n_days - 1] : {chromosome[asset, n_days - 1]} = -stocks_held[asset] : {-stocks_held[asset]} ")
+                    total_capital += (
+                        stocks_held[asset] * last_day_price
+                    )  # Update total capital
                     stocks_held[asset] = 0  # Clear remaining stocks
 
             # Validate the chromosome
             valid = self.check_chromosome(chromosome)  # Validate chromosome
-            
 
         return chromosome
 
-    @staticmethod # Not used yet...
+    @staticmethod  # Not used yet...
     def check_all_stocks_sold(chromosome, end_date_index=30):
         """
         Checks if all stocks have been sold by the last day of the period.
@@ -124,61 +140,72 @@ class GeneticAlgorithm:
         """
         stocks_held = np.sum(chromosome[:, end_date_index], axis=0)
         all_sold = np.all(stocks_held == 0)
-        
+
         return all_sold
-    
-    @staticmethod   
-    def aux_check_chromosome_has_previous_stocks(chromosome) :
+
+    @staticmethod
+    def aux_check_chromosome_has_previous_stocks(chromosome):
         for stock in range(chromosome.shape[0]):
             value = 0
-            for day in range(chromosome.shape[1] -1 ): # -1 because we do not want to check the last day!
+            for day in range(
+                chromosome.shape[1] - 1
+            ):  # -1 because we do not want to check the last day!
                 value += chromosome[stock][day]
-                if value < 0 : 
-                    #print(stock,day)
+                if value < 0:
+                    # print(stock,day)
                     return False
         return True
-    
-    def check_chromosome(self,chromosome) :
+
+    def check_chromosome(self, chromosome):
         total = 10000
         day_sold = 0
-        if np.any(chromosome[:, 0] < 0) : # Can´t sell in the first day 
+        if np.any(chromosome[:, 0] < 0):  # Can´t sell in the first day
             print("Can´t sell in the first day ")
             return False
-        if not GeneticAlgorithm.aux_check_chromosome_has_previous_stocks(chromosome) : # before selling stocks we must own them
+        if not GeneticAlgorithm.aux_check_chromosome_has_previous_stocks(
+            chromosome
+        ):  # before selling stocks we must own them
             print("Before selling stocks we must own them")
             return False
         # if not check_all_stocks_sold(chromosome):
         #     print("All stocks must have been sold by the last day of the period.")
         #     return False
-        
-        for active_index in range(chromosome.shape[1]): # Iterate through columns(days)
-            day_sold,day_spent = 0,0
-        
-            
-            if np.any(chromosome[:, active_index] < 1): # If it decides to sell
+
+        for active_index in range(chromosome.shape[1]):  # Iterate through columns(days)
+            day_sold, day_spent = 0, 0
+
+            if np.any(chromosome[:, active_index] < 1):  # If it decides to sell
                 negative_indexes = np.where(chromosome[:, active_index] < 0)[0]
-                for index in negative_indexes :
-                    day_sold +=  chromosome[index][active_index] * self.january.iloc[active_index, index ] # Date column is taken into account so +1
-            total_before = total  
-            total -= day_spent + day_sold 
-            
-            if np.any(chromosome[:, active_index] > 1): # If it decides to buy
+                for index in negative_indexes:
+                    day_sold += (
+                        chromosome[index][active_index]
+                        * self.january.iloc[active_index, index]
+                    )  # Date column is taken into account so +1
+            total_before = total
+            total -= day_spent + day_sold
+
+            if np.any(chromosome[:, active_index] > 1):  # If it decides to buy
                 positive_indexes = np.where(chromosome[:, active_index] > 0)[0]
-                for index in positive_indexes :
-                    day_spent +=  chromosome[index][active_index] * self.january.iloc[active_index, index ] # Date column is taken into account so +1
-                
-                if day_spent > total  : # Cannot spend more than you have. We first buy, then we can sell.
+                for index in positive_indexes:
+                    day_spent += (
+                        chromosome[index][active_index]
+                        * self.january.iloc[active_index, index]
+                    )  # Date column is taken into account so +1
+
+                if (
+                    day_spent > total
+                ):  # Cannot spend more than you have. We first buy, then we can sell.
                     print(f"Cannot spend more than you have.")
                     return False
-                
-            if total < 0:  
-                print(f"total<0 : {total} = {total_before} - {day_spent} + {day_sold}")  
-                return False  
+
+            if total < 0:
+                print(f"total<0 : {total} = {total_before} - {day_spent} + {day_sold}")
+                return False
             # print(f"Day spent : {day_spent} > total : {total}")
             # print(f"TOTAL: {total},DAY_SOLD: {abs(day_sold)}, DAY_SPENT : {-day_spent}")
         return True
 
-    def get_capital(self,chromosome, asset_index, day_index):
+    def get_capital(self, chromosome, asset_index, day_index):
         """
         Calcula el capital restante y las acciones poseídas hasta un día y activo específicos.
 
@@ -197,10 +224,10 @@ class GeneticAlgorithm:
         capital = self.initial_capital
         n_assets = chromosome.shape[0]
         stocks_held = np.zeros(n_assets, dtype=int)
-        
+
         # Evaluar las decisiones hasta el día y activo seleccionados
-        for d in range(day_index+1):  # Recorre días hasta el día dado
-            for a in range(asset_index+1):  # Recorre activos hasta el índice dado
+        for d in range(day_index + 1):  # Recorre días hasta el día dado
+            for a in range(asset_index + 1):  # Recorre activos hasta el índice dado
                 if chromosome[a, d] > 0:  # Compra
                     cost = chromosome[a, d] * self.january.iloc[d, a]
                     capital -= cost
@@ -209,7 +236,7 @@ class GeneticAlgorithm:
                     revenue = -chromosome[a, d] * self.january.iloc[d, a]
                     capital += revenue
                     stocks_held[a] += chromosome[a, d]  # Resta la venta
-        
+
         return capital, stocks_held
 
     def filter_and_choose_random(self, last_day, asset, max_quantity):
@@ -229,10 +256,10 @@ class GeneticAlgorithm:
         """
         # Filtrar el DataFrame para días y activos posteriores al dado
         filtered_df = self.january.iloc[last_day:-1, asset]
-        
+
         # Filtrar valores por la cantidad máxima
         filtered_df = filtered_df[filtered_df <= max_quantity]
-        
+
         # Verificar si hay elementos disponibles después del filtrado
         if filtered_df.empty:
             return None, None, None
@@ -254,37 +281,36 @@ class GeneticAlgorithm:
         - asset_index int, índice del stock.
 
         Returns:
-        - 
+        -
         """
         results = list()
         asset_found = False
         day_found = False
         # Recorrer días y activos en orden inverso
         for asset in range(asset_index - 1, -1, -1):
-            for day in range(day_index- 1, -1, -1):
+            for day in range(day_index - 1, -1, -1):
                 if chromosome[asset, day] > 0:  # Si se encuentra una compra
-                    last_buy = [asset,day,chromosome[asset, day]]
+                    last_buy = [asset, day, chromosome[asset, day]]
                     results.append(last_buy)
                     asset_found = True
                     break
-            if not asset_found :
+            if not asset_found:
                 return []
-            else : 
+            else:
                 break
-                
 
         # Recorrer días y activos en orden lógico
-        for day_ind in range(day + 1, chromosome.shape[1],1):
-                if chromosome[asset, day_ind] < 0:  # Si se encuentra una venta
-                    results.append([asset,day_ind,chromosome[asset, day_ind]])
-                    day_found = True
-                    break
-                    
-                if not day_found :
-                    return []
+        for day_ind in range(day + 1, chromosome.shape[1], 1):
+            if chromosome[asset, day_ind] < 0:  # Si se encuentra una venta
+                results.append([asset, day_ind, chromosome[asset, day_ind]])
+                day_found = True
+                break
+
+            if not day_found:
+                return []
 
         return results
-    
+
     @staticmethod
     def generate_mutation_indices(chromosome, num_mutations):
         """
@@ -300,31 +326,30 @@ class GeneticAlgorithm:
         """
         n_assets, n_days = chromosome.shape
         selected_indices = []
-        
 
         while len(selected_indices) < num_mutations:
             # Generar índices aleatorios
             asset_index = np.random.randint(0, n_assets)
             day_index = np.random.randint(0, n_days)
 
-            try :
+            try:
                 # Comprobar si el índice cumple con los criterios
-                movements = GeneticAlgorithm.find_lasts_movements(chromosome, day_index, asset_index)
+                movements = GeneticAlgorithm.find_lasts_movements(
+                    chromosome, day_index, asset_index
+                )
                 # Validar si encontró tanto una compra como una venta
                 last_buy = any(m[2] > 0 for m in movements)
                 next_sale = any(m[2] < 0 for m in movements)
 
                 if last_buy and next_sale:
                     selected_indices.append((asset_index, day_index))
-            except :
+            except:
                 continue
-
-
 
         return selected_indices
 
-
-    def mutate_selected_points(self,chromosome):
+    # TODO : Implement the probability condition
+    def mutate_selected_points(self, chromosome):
         """
         Realiza mutaciones en puntos seleccionados de un cromosoma respetando las restricciones.
 
@@ -338,54 +363,145 @@ class GeneticAlgorithm:
         """
         mutated_chromosome = chromosome.copy()
         n_assets, n_days = chromosome.shape
-        selected_indices = GeneticAlgorithm.generate_mutation_indices(chromosome, num_mutations=self.num_mutations)#[(np.random.randint(0, n_assets), np.random.randint(0, n_days)) for _ in range(num_mutations)]
+        selected_indices = GeneticAlgorithm.generate_mutation_indices(
+            chromosome, num_mutations=self.num_mutations
+        )  # [(np.random.randint(0, n_assets), np.random.randint(0, n_days)) for _ in range(num_mutations)]
         print(selected_indices)
-        
+
         for asset_index, day_index in selected_indices:
             # Obtener el capital y las acciones disponibles hasta este momento
-            capital, stocks_held = self.get_capital(mutated_chromosome, asset_index, day_index)
+            capital, stocks_held = self.get_capital(
+                mutated_chromosome, asset_index, day_index
+            )
 
             # Precio del activo en el día actual
             asset_price = self.january.iloc[day_index, asset_index]
-            
-            movements = GeneticAlgorithm.find_lasts_movements(chromosome, day_index, asset_index)
-            last_asset, last_day, quantity =  movements[0] # Buys
+
+            movements = GeneticAlgorithm.find_lasts_movements(
+                chromosome, day_index, asset_index
+            )
+            last_asset, last_day, quantity = movements[0]  # Buys
             print(f"Buys : {movements[0]}")
             print(f"Sells : {movements[1]}")
-            substract = np.random.randint(1, quantity+1)
-            mutated_chromosome[last_asset][last_day] = quantity - substract # Now we must make sure we sell "substract amount" fewer participations of that stock!
-            
-            last_sell, last_sell_day, sell_quantity = movements[1] # Sells
-            mutated_chromosome[last_sell][last_sell_day] = sell_quantity + substract # now we should have substract*january.iloc[last_day, last_asset] USD more
+            substract = np.random.randint(1, quantity + 1)
+            mutated_chromosome[last_asset][last_day] = (
+                quantity - substract
+            )  # Now we must make sure we sell "substract amount" fewer participations of that stock!
 
-            extra_usd_earned = substract*self.january.iloc[last_day, last_asset]
-            
-            selected_day, selected_asset, price = self.filter_and_choose_random(last_day, last_asset, extra_usd_earned)
+            last_sell, last_sell_day, sell_quantity = movements[1]  # Sells
+            mutated_chromosome[last_sell][last_sell_day] = (
+                sell_quantity + substract
+            )  # now we should have substract*january.iloc[last_day, last_asset] USD more
+
+            extra_usd_earned = substract * self.january.iloc[last_day, last_asset]
+
+            selected_day, selected_asset, price = self.filter_and_choose_random(
+                last_day, last_asset, extra_usd_earned
+            )
             max_buy = extra_usd_earned // price
-            actives_bought = np.random.randint(1, max_buy + 1) # we should have some USD margin. We must now make sure to sell them before january ends.
+            actives_bought = np.random.randint(
+                1, max_buy + 1
+            )  # we should have some USD margin. We must now make sure to sell them before january ends.
             mutated_chromosome[selected_asset][selected_day] = actives_bought
-            
-            day_to_sell = np.random.choice([day for day in range(selected_day,30,1)]) # We select a random day to sell, but not the last one.
+
+            day_to_sell = np.random.choice(
+                [day for day in range(selected_day, 30, 1)]
+            )  # We select a random day to sell, but not the last one.
             mutated_chromosome[selected_asset][day_to_sell] -= actives_bought
-            
-            
+
         return mutated_chromosome
-    
-    
-    
 
+    def calculate_weights_from_chromosome(self, cromosoma):
+        """
+        Calculate portfolio weights based on the chromosome (buy/sell quantities).
 
+        Parameters:
+        - cromosoma: np.array, a matrix of buy/sell decisions (positive for buy, negative for sell).
 
+        Returns:
+        - weights: np.array, portfolio weights (proportions of capital allocated to each asset).
+        """
+        # Initialize the net flows (purchases/sales) for each asset
+        net_flows = np.zeros(cromosoma.shape[0])  # One entry for each asset
 
-    def knapsack(self, x, sizes, benefits, max_capacity):
-        current_capacity = 0
-        total_benefit = 0
-        for i in range(len(x)):
-            if x[i] == 1:
-                if current_capacity + sizes[i] <= max_capacity:
-                    current_capacity += sizes[i]
-                    total_benefit += benefits[i]
-        return total_benefit
+        # Calculate net flows for each asset based on the chromosome
+        for asset in range(cromosoma.shape[0]):
+            for day in range(cromosoma.shape[1]):
+                if cromosoma[asset, day] > 0:  # Buy action
+                    net_flows[asset] -= (
+                        cromosoma[asset, day] * self.january.iloc[day, asset]
+                    )  # Outflow (buy)
+                elif cromosoma[asset, day] < 0:  # Sell action
+                    net_flows[asset] += (
+                        abs(cromosoma[asset, day]) * self.january.iloc[day, asset]
+                    )  # Inflow (sell)
+
+        # Normalize to get portfolio weights (capital allocation for each asset)
+        total_flows = np.sum(net_flows)
+        weights = net_flows / total_flows
+
+        return weights
+
+    @staticmethod
+    def calculate_portfolio_return(weights, expected_returns):
+        """
+        Calculate the expected return of the portfolio.
+
+        Parameters:
+        - weights: np.array, portfolio weights (proportions of capital allocated to each asset).
+        - expected_returns: np.array, expected returns for each asset. expected_returns = january.mean(axis=0).to_numpy()
+
+        Returns:
+        - portfolio_return: float, expected return of the portfolio.
+        """
+        return np.dot(weights, expected_returns)
+
+    @staticmethod
+    def calculate_portfolio_risk(weights, returns_df):
+        """
+        Calculate the portfolio risk (variance) using the covariance matrix of returns.
+
+        Parameters:
+        - weights: np.array, portfolio weights (proportions of capital allocated to each asset).
+        - returns_df: pd.DataFrame, DataFrame of historical asset returns over time.
+
+        Returns:
+        - risk: float, portfolio variance.
+        """
+        covariance_matrix = returns_df.cov()  # Covariance matrix of asset returns
+        risk = np.dot(
+            weights.T, np.dot(covariance_matrix, weights)
+        )  # Portfolio variance
+        return risk
+
+    def CARA(chromosome, expected_returns, returns_df, gamma):
+        """
+        Calculate the Certainty-Equivalent Risk Aversion (CARA) objective function for a portfolio.
+
+        Parameters:
+        - chromosome: np.array, a matrix representing the buy/sell decisions for each asset and day.
+        - expected_returns: np.array, expected returns for each asset.
+        - returns_df: pd.DataFrame, DataFrame of asset returns over time.
+        - gamma: float, risk aversion coefficient.
+
+        Returns:
+        - cara_value: float, the CARA objective value for the portfolio.
+        """
+        # 1. Calculate portfolio weights from chromosome (buy/sell quantities)
+        weights = self.calculate_weights_from_chromosome(chromosome)
+
+        # 2. Calculate portfolio return (E[R_p])
+        portfolio_return = GeneticAlgorithm.calculate_portfolio_return(
+            weights, expected_returns
+        )  # expected_returns(500,), average daily predictions. expected_returns = january.mean(axis=0).to_numpy()  # Vector de tamaño (500,)
+
+        # 3. Calculate portfolio risk (variance)
+        portfolio_risk = GeneticAlgorithm.calculate_portfolio_risk(weights, returns_df)
+
+        # 4. Calculate CARA objective function
+        cara_value = portfolio_return - (gamma / 2) * portfolio_risk
+
+        return cara_value
 
     def is_better_than(self, a, b):
         return a > b if self.maximize else a < b
@@ -397,18 +513,16 @@ class GeneticAlgorithm:
                 chosen = i
         return population[chosen]
 
-    def crossover(self, p1, p2):
-        c1, c2 = p1.copy(), p2.copy()
-        if rand() < self.crossover_prob:
-            point = randint(1, len(p1) - 2)
-            c1 = p1[:point] + p2[point:]
-            c2 = p2[:point] + p1[point:]
-        return [c1, c2]
+    # def crossover(self, p1, p2):
+    #     c1, c2 = p1.copy(), p2.copy()
+    #     if rand() < self.crossover_prob:
+    #         point = randint(1, len(p1) - 2)
+    #         c1 = p1[:point] + p2[point:]
+    #         c2 = p2[:point] + p1[point:]
+    #     return [c1, c2]
 
-    def mutation(self, chromosome):
-        for i in range(len(chromosome)):
-            if rand() < self.mutation_prob:
-                chromosome[i] = 1 - chromosome[i]
+    def crossover(self, p1, p2):
+        pass
 
     def best_average_worst(self, fitness):
         best_chromosome = 0
@@ -423,13 +537,16 @@ class GeneticAlgorithm:
                 worst_fitness = fitness[i]
         return best_chromosome, best_fitness, average_fitness, worst_fitness
 
-    def genetic_algorithm(self, n_bits, max_capacity, sizes, benefits):
+    def genetic_algorithm(self, expected_returns, returns_df, gamma):
         generation = 0
         evolution = []
         population = [
-            randint(0, 2, n_bits).tolist() for _ in range(self.population_size)
+            self.generate_chromosome_randomized_with_restrictions()
+            for _ in range(self.population_size)  # Ensured valid chromosome.
         ]
-        fitness = [self.knapsack(c, sizes, benefits, max_capacity) for c in population]
+        fitness = [
+            self.CARA(c, expected_returns, returns_df, gamma) for c in population
+        ]
         best_chromosome, best_fitness, average_fitness, worst_fitness = (
             self.best_average_worst(fitness)
         )
@@ -450,12 +567,12 @@ class GeneticAlgorithm:
             for i in range(0, self.population_size, 2):
                 p1, p2 = selected[i], selected[(i + 1) % len(selected)]
                 for c in self.crossover(p1, p2):
-                    self.mutation(c)
+                    self.mutate_selected_points(c)
                     if len(offspring) < self.population_size:
                         offspring.append(c)
             population = offspring
             fitness = [
-                self.knapsack(c, sizes, benefits, max_capacity) for c in population
+                self.CARA(c, expected_returns, returns_df, gamma) for c in population
             ]
             best_chromosome, best_fitness, average_fitness, worst_fitness = (
                 self.best_average_worst(fitness)
@@ -468,20 +585,19 @@ class GeneticAlgorithm:
         return population[best_chromosome], fitness[best_chromosome], evolution
 
     def execute(self):
-        n_bits, max_capacity, sizes, benefits = self.read_knapsack_file()
         best_chromosome, best_fitness, evolution = self.genetic_algorithm(
-            n_bits, max_capacity, sizes, benefits
+            expected_returns, returns_df, gamma
         )
         print(
             f"Execution completed! Best solution: f({best_chromosome}) = {best_fitness:.3f}"
         )
 
-        occupied_capacity = sum(
-            sizes[i] for i in range(len(best_chromosome)) if best_chromosome[i] == 1
-        )
-        print(
-            f"Maximum capacity: {max_capacity:.2f}, Occupied capacity: {occupied_capacity:.2f}"
-        )
+        # TODO
+        # resulting_usd = calculate_result_usd_function(best_chromosome)
+        # print(
+        #     f"Resulting USD: {max_capacity:.2f}, Stocks bought: {stocks_bought:.2f}, Stocks sold: {stocks_sold:.2f}"
+        # )
+
         plt.plot(range(len(evolution)), [x[0] for x in evolution], label="Best")
         plt.plot(range(len(evolution)), [x[1] for x in evolution], label="Average")
         plt.plot(range(len(evolution)), [x[2] for x in evolution], label="Worst")
