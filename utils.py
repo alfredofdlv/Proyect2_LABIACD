@@ -8,6 +8,69 @@ from sklearn.decomposition import PCA, IncrementalPCA
 import numpy as np
 import matplotlib.pyplot as plt
 from datetime import datetime
+import os
+import shutil
+import random
+
+def copy_files(source_folder, destination_folder, num_files, random_selection=False):
+    """
+    Copies a specified number of CSV files from a source folder to a destination folder.
+    Deletes all existing files in the destination folder before copying.
+    Used for experiments while increasing the number of stocks in the sample of the dataset.
+
+
+    Parameters:
+    - source_folder (str): Path to the folder containing the source CSV files.
+    - destination_folder (str): Path to the folder where the files will be copied.
+    - num_files (int): Number of files to copy.
+    - random_selection (bool): If True, selects files randomly. If False, selects files sequentially.
+
+    Returns:
+    - None
+    """
+    try:
+        # Clear the destination folder by deleting all existing files
+        if os.path.exists(destination_folder):
+            for file in os.listdir(destination_folder):
+                file_path = os.path.join(destination_folder, file)
+                if os.path.isfile(file_path):
+                    os.remove(file_path)
+                elif os.path.isdir(file_path):
+                    shutil.rmtree(file_path)  # Remove directories if any
+            print(f"Cleared all files in destination folder: {destination_folder}")
+        else:
+            # Create the destination folder if it does not exist
+            os.makedirs(destination_folder)
+
+        # Retrieve all CSV files in the source folder
+        files = [f for f in os.listdir(source_folder) if f.endswith('.csv')]
+
+        if not files:
+            print("No CSV files found in the source folder.")
+            return
+
+        # Select files to copy based on user preference (random or sequential)
+        if random_selection:
+            # Select a random sample of files
+            files_to_copy = random.sample(files, min(num_files, len(files)))
+        else:
+            # Sort files and select the first `num_files` files
+            files.sort()
+            files_to_copy = files[:num_files]
+
+        # Copy each selected file to the destination folder
+        for file in files_to_copy:
+            source_path = os.path.join(source_folder, file)
+            destination_path = os.path.join(destination_folder, file)
+            shutil.copy2(source_path, destination_path)  # Preserve metadata during copy
+            print(f"Copied: {file}")
+
+        print(f"Successfully copied {len(files_to_copy)} files to the folder: {destination_folder}")
+
+    except Exception as e:
+        # Print an error message if something goes wrong
+        print(f"An error occurred: {e}")
+
 
 with open(r'C:\Users\user\OneDrive - Universidad de Oviedo\Escritorio\UNI\3ºAÑO\LAB_IACD\Proyecto_2_Lab_IACD\api_key.txt', 'r') as file:
     api_key = file.read().strip()
@@ -412,3 +475,128 @@ def crear_ventanas_temporales(tensor, ventana, horizonte):
         # Seleccionar únicamente AdjustedClose para y (primer columna de características)
         y.append(tensor[t + horizonte, :, 0])  # Supone que AdjustedClose está en la primera posición
     return np.array(X), np.array(y)
+
+def desescalar_y(actuals, preds, scaler, n_features):
+    """
+    Desescalar los valores reales y predicciones usando un escalador ajustado.
+    
+    Args:
+        actuals (ndarray): Valores reales escalados (tensor 3D).
+        preds (ndarray): Predicciones escaladas (tensor 3D).
+        scaler (StandardScaler): Escalador ajustado.
+        n_features (int): Número de características (salidas) por muestra.
+    
+    Returns:
+        tuple: actuals y preds desescalados (tensor 3D).
+    """
+
+    # Convertir a arrays de NumPy si son listas
+    actuals = np.array(actuals)
+    preds = np.array(preds)
+
+    # print("Forma de actuals antes del desescalado:", actuals.shape)
+
+    # Aplanar a 2D
+    # actuals_2d = actuals.reshape(-1, n_features)
+    # preds_2d = preds.reshape(-1, n_features)
+
+    # print("Forma de actuals_2d:", actuals_2d.shape)
+    # print("Forma de scaler_y.scale_:", scaler.scale_)
+    # print("Forma de scaler_y.mean_:", scaler.mean_)
+
+    # Desescalar usando el escalador
+    actuals_descaled_2d = scaler.inverse_transform(actuals)
+    preds_descaled_2d = scaler.inverse_transform(preds)
+
+    # print("Forma después del desescalado:", actuals_descaled_2d.shape)
+    return actuals_descaled_2d, preds_descaled_2d
+
+    
+
+def desescalar_y_multicompanies(y_scaled, scaler, n_output_features, n_companies):
+    """
+    Desescalar las salidas (y) para múltiples empresas.
+    
+    Args:
+        y_scaled (ndarray): Predicciones o valores reales escalados, forma (n_samples, n_companies).
+        scaler (StandardScaler): Escalador ajustado al tensor completo.
+        n_output_features (int): Número de salidas por empresa.
+        n_companies (int): Número total de empresas.
+
+    Returns:
+        ndarray: Valores desescalados, misma forma que y_scaled.
+    """
+    y_scaled = np.array(y_scaled)
+    y_descaled = np.zeros_like(y_scaled)  
+
+    for company_idx in range(y_scaled.shape[1]):  # Ajustamos al número real de columnas en y_scaled
+        # Obtener las medias y escalas específicas para esta empresa
+        # mean = scaler.mean_[company_idx * n_output_features:(company_idx + 1) * n_output_features]
+        # scale = scaler.scale_[company_idx * n_output_features:(company_idx + 1) * n_output_features]
+
+        # # Desescalar las columnas de esta empresa
+        # y_descaled[:, company_idx] = (y_scaled[:, company_idx] * scale[0]) + mean[0]
+        mean = scaler.mean_[company_idx]
+        scale = scaler.scale_[company_idx]
+        
+        # Aplica el desescalado
+        y_descaled[:, company_idx] = (y_scaled[:, company_idx] * scale) + mean
+    
+
+    return y_descaled
+
+def get_company_list_from_directory(directory):
+    """
+    Extracts a list of company names (tickers) from filenames in a directory.
+
+    Args:
+        directory (str): Path to the directory containing company data files (e.g., CSVs).
+
+    Returns:
+        list: A sorted list of company names (tickers) extracted from the filenames.
+    
+    Example:
+        If directory contains files: ['AAPL.csv', 'MSFT.csv', 'GOOGL.csv'],
+        the function returns: ['AAPL', 'GOOGL', 'MSFT'].
+    """
+    try:
+        # List all files in the directory with a '.csv' extension
+        files = [f for f in os.listdir(directory) if f.endswith('.csv')]
+        
+        # Extract the file name without the extension (ticker name)
+        companies = [os.path.splitext(file)[0] for file in files]
+        
+        # Sort the tickers alphabetically for consistency
+        companies.sort()
+
+        return companies
+    except Exception as e:
+        print(f"Error retrieving company names: {e}")
+        return []
+
+def map_company_names_to_predictions(y_test, companies):
+    """
+    Maps column indices of a 2D prediction matrix (y_test) to stock tickers.
+
+    Args:
+        y_test (ndarray): A 2D array or matrix of predictions (n_samples, n_companies).
+        companies (list): A list of company names (tickers) in the same order as the columns of y_test.
+
+    Returns:
+        dict: A dictionary where the keys are column indices of y_test and the values are company names.
+
+    Raises:
+        ValueError: If the number of columns in y_test does not match the length of the companies list.
+
+    Example:
+        y_test shape: (100, 3)
+        companies: ['AAPL', 'MSFT', 'GOOGL']
+        Returns: {0: 'AAPL', 1: 'MSFT', 2: 'GOOGL'}
+    """
+    if y_test.shape[1] != len(companies):
+        raise ValueError("Number of columns in y_test does not match the number of companies.")
+
+    # Create a mapping of column indices to company names
+    mapping = {idx: company for idx, company in enumerate(companies)}
+
+    return mapping
