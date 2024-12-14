@@ -237,7 +237,6 @@ def join_macro(start,end):
         'EURUSD=X',  # Tipo de cambio del euro al dólar estadounidense
         'BTC-USD',   # Precio del Bitcoin en dólares estadounidenses
         'HO=F',      # Futuros del combustible de calefacción
-        'ZC=F'       # Futuros del maíz (repetido)
     ]
 
     dataframes=[]
@@ -353,62 +352,61 @@ def join_technical_indicators(database,folder = r"data/stocks", export=True, axi
 
 
 
-def preprocess_and_pca(X_train, X_test, target_keyword="Close", exclude_keyword="Adjusted", show_plot=True):
+def preprocess_and_pca(X_train, X_test, show_plot=True):
     """
-    Realiza la preprocesamiento y PCA en un conjunto de datos.
+    Performs preprocessing and PCA on a dataset.
 
     Args:
-        X_train (DataFrame): Datos de entrenamiento.
-        X_test (DataFrame): Datos de prueba.
-        show_plot (bool): Si True, muestra un gráfico de varianza explicada acumulada.
+        X_train (DataFrame): Training data.
+        X_test (DataFrame): Testing data.
+        show_plot (bool): If True, displays a plot of cumulative explained variance.
 
     Returns:
-        tuple: X_train_pca, X_test, varianza_acumulada
+        tuple: X_train_pca, X_test, cumulative_variance
     """
-    print("Inicio del preprocesamiento y PCA...")
+    print("Starting preprocessing and PCA...")
 
-
-
-    # Escalar los datos
+    # Scale the data
     scaler = StandardScaler()
     X_train = scaler.fit_transform(X_train)
     X_test = scaler.transform(X_test)
 
-    # Calcular PCA temporal para determinar componentes necesarios
-    print("Hora antes del PCA:", datetime.now().time())
+    # Compute temporary PCA to determine the required number of components
+    print("Time before PCA:", datetime.now().time())
     pca_temp = PCA(n_components=0.975)
     pca_temp.fit(X_train)
 
-    # Determinar componentes según el criterio de Kaiser
-    autovalores = pca_temp.explained_variance_
-    media_autovalores = np.mean(autovalores)
+    # Determine components based on the Kaiser criterion
+    eigenvalues = pca_temp.explained_variance_
+    mean_eigenvalue = np.mean(eigenvalues)
 
-    criterio_kaiser_cov = autovalores > media_autovalores
-    criterio_kaiser_cor = autovalores > 1
-    print(f"Número de componentes según criterio de Kaiser (covarianza): {np.sum(criterio_kaiser_cov)}")
-    print(f"Número de componentes según criterio de Kaiser (correlación): {np.sum(criterio_kaiser_cor)}")
+    kaiser_cov_criterion = eigenvalues > mean_eigenvalue
+    kaiser_cor_criterion = eigenvalues > 1
+    print(f"Number of components according to Kaiser criterion (covariance): {np.sum(kaiser_cov_criterion)}")
+    print(f"Number of components according to Kaiser criterion (correlation): {np.sum(kaiser_cor_criterion)}")
 
-    # Aplicar Incremental PCA con número óptimo de componentes
-    ipca = IncrementalPCA(n_components=np.sum(criterio_kaiser_cor))
-    # ipca = IncrementalPCA(n_components=3)
+    # Apply Incremental PCA with the optimal number of components
+    ipca = IncrementalPCA(n_components=np.sum(kaiser_cor_criterion))
 
     X_train_pca = ipca.fit_transform(X_train)
-    varianza_explicada = ipca.explained_variance_ratio_
-    varianza_acumulada = np.cumsum(varianza_explicada)
+    X_test      =ipca.transform(X_test)
+    explained_variance = ipca.explained_variance_ratio_
+    cumulative_variance = np.cumsum(explained_variance)
 
-    print("Hora después del PCA:", datetime.now().time())
+    print("Time after PCA:", datetime.now().time())
 
-    # Mostrar gráfico si se solicita
+    # Display plot if requested
     if show_plot:
         plt.figure(figsize=(8, 5))
-        plt.plot(range(1, len(varianza_acumulada) + 1), varianza_acumulada, marker='o', linestyle='--')
-        plt.title('Varianza Explicada Acumulada')
-        plt.xlabel('Número de Componentes Principales')
-        plt.ylabel('Varianza Explicada Acumulada')
+        plt.plot(range(1, len(cumulative_variance) + 1), cumulative_variance, marker='o', linestyle='--')
+        plt.title('Cumulative Explained Variance')
+        plt.xlabel('Number of Principal Components')
+        plt.ylabel('Cumulative Explained Variance')
         plt.grid(True)
         plt.show()
 
-    return X_train_pca, X_test, varianza_acumulada
+    return X_train_pca, X_test, cumulative_variance
+
 
 def mean_positive_error(y_true, y_pred):
     """

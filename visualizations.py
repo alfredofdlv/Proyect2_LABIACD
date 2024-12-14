@@ -423,3 +423,227 @@ def represent_adj_close(df, start_date='2010-01-01', end_date='2023-12-31'):
 
     plt.tight_layout()
     plt.show()
+
+def analyze_financial_data(data):
+    
+    # Identify companies from column names
+    columns = data.columns
+    companies = list(set([col.split('_')[1] for col in columns if '_' in col]))
+
+    # 2. General statistics with visualization
+    metrics = ['AdjustedClose', 'Low', 'Open', 'High']
+
+    summary_stats = {}
+    plt.figure(figsize=(12, 7))
+
+    for i, metric in enumerate(metrics, start=1):
+        metric_cols = [col for col in columns if metric in col]
+        summary_stats[metric] = data[metric_cols].describe().T
+
+        # Create a median plot for each metric
+        plt.subplot(2, 2, i)
+        medians = data[metric_cols].median()
+        plt.plot(medians.index, medians.values, marker='o', linestyle='-', color='b')
+        plt.title(f'Median by company for {metric}')
+        plt.xlabel('Companies')
+        plt.ylabel('Median')
+        plt.xticks(rotation=90)
+        plt.grid()
+
+    plt.tight_layout()
+    plt.show()
+
+    # Median plot for "Volume"
+    metric = 'Volume'
+    metric_cols = [col for col in columns if metric in col]
+    summary_stats[metric] = data[metric_cols].describe().T
+
+    plt.figure(figsize=(10, 6))
+    medians = data[metric_cols].median()
+    plt.plot(medians.index, medians.values, marker='o', linestyle='-', color='g')
+    plt.title(f'Median by company for {metric}')
+    plt.xlabel('Companies')
+    plt.ylabel('Median')
+    plt.xticks(rotation=90)
+    plt.grid()
+    plt.tight_layout()
+    plt.show()
+
+    # 3. Global average trends
+    average_metrics = {}
+    rows, cols = 2, 2
+    fig, axes = plt.subplots(nrows=rows, ncols=cols, figsize=(14, 10))
+    axes = axes.flatten()
+
+    for i, metric in enumerate(metrics):
+        metric_cols = [col for col in columns if metric in col]
+        average_metrics[metric] = data[metric_cols].mean(axis=1)
+        axes[i].plot(data['Date'], average_metrics[metric], label=f'Average {metric}')
+        axes[i].set_title(f'Global average trend of {metric}')
+        axes[i].set_xlabel('Date')
+        axes[i].set_ylabel(f'Average {metric}')
+        axes[i].legend()
+        axes[i].grid()
+
+    plt.tight_layout()
+    plt.show()
+
+    # Global average trend for "Volume"
+    metric = 'Volume'
+    metric_cols = [col for col in columns if metric in col]
+    average_metrics[metric] = data[metric_cols].mean(axis=1)
+
+    plt.figure(figsize=(7, 6))
+    plt.plot(data['Date'], average_metrics[metric], label=f'Average {metric}')
+    plt.title(f'Global average trend of {metric}')
+    plt.xlabel('Date')
+    plt.ylabel(f'Average {metric}')
+    plt.legend()
+    plt.grid()
+    plt.show()
+
+    # 5. Distribution of metrics (global average)
+    rows, cols = 2, 2
+    fig, axes = plt.subplots(nrows=rows, ncols=cols, figsize=(12, 7))
+    axes = axes.flatten()
+
+    for i, metric in enumerate(metrics):
+        global_metric = average_metrics[metric]
+        sns.histplot(global_metric, kde=True, bins=30, color='blue', ax=axes[i])
+        axes[i].set_title(f'Distribution of average {metric}')
+        axes[i].set_xlabel(f'Average {metric}')
+        axes[i].set_ylabel('Frequency')
+
+    plt.tight_layout()
+    plt.show()
+
+    # Distribution for "Volume"
+    global_volume = average_metrics['Volume']
+    plt.figure(figsize=(12, 6))
+    sns.histplot(global_volume, kde=True, bins=30, color='green')
+    plt.title('Distribution of average Volume')
+    plt.xlabel('Average Volume')
+    plt.ylabel('Frequency')
+    plt.grid()
+    plt.show()
+
+    # Identify technical indicators
+    technical_indicators = [
+        'MACD', 'CCI', 'ATR', 'BOLL_upper', 'BOLL_lower', 'EMA20',
+        'MA5', 'MTM6', 'ROC', 'WVAD', 'RSI','SMI'
+    ]
+
+    # Filter columns for technical indicators
+    tech_cols = [col for col in data.columns if any(indicator in col for indicator in technical_indicators)]
+
+    # Ensure no missing values
+    data[tech_cols] = data[tech_cols].fillna(0)
+
+    # Normalize values for boxplot
+    data_normalized = data[tech_cols].apply(lambda x: (x - x.mean()) / x.std() if x.std() != 0 else x)
+
+    # Visualization of boxplot and individual distributions combined in 4 rows and 3 columns
+    rows, cols = 4, 3
+    fig, axes = plt.subplots(nrows=rows, ncols=cols, figsize=(18, 12))
+    axes = axes.flatten()
+
+    # Individual distributions
+    for i, indicator in enumerate(technical_indicators):
+        
+        indicator_cols = [col for col in tech_cols if indicator in col]
+        if indicator_cols:
+            sns.histplot(data[indicator_cols].values.flatten(), kde=True, bins=30, color='blue', ax=axes[i])
+            axes[i].set_title(f'Distribution of technical indicator: {indicator}')
+            axes[i].set_xlabel('Values')
+            axes[i].set_ylabel('Frequency')
+            axes[i].grid()
+
+    # Hide empty axes if fewer than 12 plots
+    for j in range(len(technical_indicators) + 1, len(axes)):
+        axes[j].axis('off')
+
+    plt.tight_layout()
+    plt.show()
+
+    macroeconomic_columns = [
+        'GDP',       # Gross Domestic Product (GDP) of the US
+        'UNRATE',    # Unemployment Rate
+        'CPIAUCSL',  # Consumer Price Index (CPI) for all urban consumers
+        'PAYEMS',    # Nonfarm Payrolls
+        'FEDFUNDS',  # Federal Funds Rate
+        'DGS10',     # 10-Year Treasury Bond Yield
+        'M1SL',      # Money Supply M1
+        'M2SL',      # Money Supply M2
+        '^GSPC',     # S&P 500 Index (US Stock Market)
+        'INDPRO',    # Industrial Production Index
+        'RSAFS',     # Retail Sales and Food Services
+        'EXCAUS',    # USD to CAD Exchange Rate
+        'BOPGSTB',   # Goods and Services Trade Balance
+        'GFDEBTN',   # US Federal Government Debt
+        'FGEXPND',   # Total Federal Government Expenditure
+        'PCEPI',     # Personal Consumption Expenditures Price Index (PCEPI)
+        'PPIACO',    # Producer Price Index (PPI)
+        '^IXIC',     # NASDAQ (Stock Market)
+        '^RUT',      # Russell 2000 Index (Small US Companies)
+        '^STOXX50E', # EURO STOXX 50 Index (European Stock Market)
+        '^FTSE',     # FTSE 100 Index (UK Stock Market)
+        'CL=F',      # Crude Oil Futures
+        'SI=F',      # Silver Futures
+        'GC=F',      # Gold Futures
+        '^HSI',      # Hang Seng Index (Hong Kong Stock Market)
+        'NG=F',      # Natural Gas Futures
+        'ZC=F',      # Corn Futures
+        'EURUSD=X',  # Euro to USD Exchange Rate
+        'BTC-USD',   # Bitcoin Price in USD
+        'HO=F',      # Heating Oil Futures
+        'ZC=F'       # Corn Futures (repeated)
+    ]
+
+    # Filter only macroeconomic columns present in data
+    macro_data = data[macroeconomic_columns]
+
+    # Create a single boxplot
+    plt.figure(figsize=(7, 7))
+    sns.boxplot(data=macro_data, orient='h', palette='coolwarm')
+    plt.title('Distribution of Macroeconomic Variables')
+    plt.xlabel('Values')
+    plt.ylabel('Macroeconomic Variables')
+    plt.grid(axis='x')
+    plt.tight_layout()
+    plt.show()
+
+    correlation_matrix = macro_data.corr()
+    plt.figure(figsize=(12, 8))
+    sns.heatmap(correlation_matrix, annot=False, fmt=".2f", cmap="coolwarm")
+    plt.title('Correlation Matrix of Macroeconomic Variables')
+    plt.show()
+
+    grouped_vars = {
+        'Economic Activity': ['GDP', 'INDPRO', 'RSAFS', 'PAYEMS'],
+        'Interest Rates': ['FEDFUNDS', 'DGS10'],
+        'Market Indices': ['^GSPC', '^IXIC', '^RUT', '^STOXX50E', '^FTSE'],
+        'Commodities': ['CL=F', 'SI=F', 'GC=F', 'NG=F', 'ZC=F', 'HO=F'],
+        'Capital Exchange': ['EURUSD=X', 'BTC-USD', 'EXCAUS']
+    }
+
+    fig, axes = plt.subplots(3, 3, figsize=(18, 15))
+    axes = axes.flatten()
+
+    for i, (category, variables) in enumerate(grouped_vars.items()):
+        if i < len(axes):
+            macro_data[variables].plot(kind='hist', bins=30, alpha=0.7, legend=True, ax=axes[i])
+            axes[i].set_title(f'Distribution for {category}')
+            axes[i].set_xlabel('Values')
+            axes[i].grid()
+
+    # Hide empty axes
+    for j in range(len(grouped_vars), len(axes)):
+        axes[j].axis('off')
+
+    plt.tight_layout()
+    plt.show()
+
+
+
+
+
