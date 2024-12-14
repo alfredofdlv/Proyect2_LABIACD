@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import numpy as np
 import torch.optim as optim
-
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # MODELO SIMPLE 
 class LSTMModel(nn.Module):
     def __init__(self, input_size, hidden_size, output_size, num_layers=1, dropout_prob=0.2):
@@ -110,76 +110,13 @@ class RNNModel(nn.Module):
         return out
 
 
-
-def train_model(model, train_loader, test_loader, num_epochs, learning_rate, criterion='MSE'):
-    # Configurar pérdida y optimizador
-    if criterion=='MSE':
-            criterion = nn.MSELoss()
-    elif criterion=='Huber': 
-        criterion = torch.nn.HuberLoss()
-
-    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
-    # Initialize metrics storage
-    metrics = {
-        "train_losses": [],
-        "valid_losses": [],
-        "train_accuracies": [],
-        "train_f1_scores": [],
-        "train_recalls": [],
-        "valid_accuracies": [],
-        "valid_f1_scores": [],
-        "valid_recalls": [],
-        "train_class_metrics": [],
-        "valid_class_metrics": [],
-    }
-    
-    # Ciclo de entrenamiento
-    for epoch in range(num_epochs):
-        model.train()  # Modo de entrenamiento
-        train_loss = 0.0
-        for X_batch, y_batch in train_loader:
-            # Forward pass
-            outputs = model(X_batch)
-            loss = criterion(outputs, y_batch)
-            
-            # Backward pass
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-            
-            train_loss += loss.item()
-        
-        # Evaluar en conjunto de prueba
-        model.eval()  # Modo de evaluación
-        test_loss = 0.0
-        with torch.no_grad():
-            for X_batch, y_batch in test_loader:
-                outputs = model(X_batch)
-                loss = criterion(outputs, y_batch)
-                test_loss += loss.item()
-        
-        # Imprimir resultados
-        print(f"Epoch {epoch+1}/{num_epochs}, Train Loss: {train_loss/len(train_loader):.4f}, Test Loss: {test_loss/len(test_loader):.4f}")
-    return model
-
-
-def evaluate_model(model, data_loader):
-    model.eval()
-    predictions, actuals = [], []
-    with torch.no_grad():
-        for X_batch, y_batch in data_loader:
-            outputs = model(X_batch)
-            predictions.append(outputs.numpy())
-            actuals.append(y_batch.numpy())
-    return predictions, actuals
-
 from utils import mean_positive_error
 from sklearn.metrics import mean_squared_error, mean_absolute_percentage_error, r2_score
 import numpy as np
 
 def calculate_metrics(predictions, actuals):
     """
-    Calcular RMSE, MPE, MAE y R².
+    Calcular RMSE, MPE, MAPE y R².
     
     Args:
         predictions (ndarray): Predicciones del modelo.
@@ -220,6 +157,8 @@ def train_and_evaluate_model(model, train_loader, test_loader, num_epochs, learn
         valid_preds: Predicciones del modelo para el conjunto de validación.
         metrics: Diccionario con métricas de entrenamiento y validación.
     """
+    model = model.to(device)
+
     # Configurar pérdida y optimizador
     if criterion == 'MSE':
         criterion = nn.MSELoss()
@@ -261,6 +200,8 @@ def train_and_evaluate_model(model, train_loader, test_loader, num_epochs, learn
         train_actuals, train_preds = [], []
 
         for X_batch, y_batch in train_loader:
+            X_batch, y_batch = X_batch.to(device), y_batch.to(device)
+            
             # Forward pass
             outputs = model(X_batch)
             loss = criterion(outputs, y_batch)
@@ -273,8 +214,8 @@ def train_and_evaluate_model(model, train_loader, test_loader, num_epochs, learn
             train_loss += loss.item()
 
             # Guardar predicciones y valores reales
-            train_preds.append(outputs.detach().numpy())
-            train_actuals.append(y_batch.numpy())
+            train_preds.append(outputs.detach().cpu().numpy())
+            train_actuals.append(y_batch.cpu().numpy())
 
         # Calcular métricas para entrenamiento
         train_preds = np.concatenate(train_preds, axis=0)
@@ -294,14 +235,14 @@ def train_and_evaluate_model(model, train_loader, test_loader, num_epochs, learn
 
         with torch.no_grad():
             for X_batch, y_batch in test_loader:
+                X_batch, y_batch = X_batch.to(device), y_batch.to(device)
                 outputs = model(X_batch)
                 loss = criterion(outputs, y_batch)
                 valid_loss += loss.item()
 
                 # Guardar predicciones y valores reales
-                valid_preds.append(outputs.numpy())
-                valid_actuals.append(y_batch.numpy())
-
+                valid_preds.append(outputs.cpu().numpy())
+                valid_actuals.append(y_batch.cpu().numpy())
         # Calcular métricas para validación
         valid_preds = np.concatenate(valid_preds, axis=0)
         valid_actuals = np.concatenate(valid_actuals, axis=0)

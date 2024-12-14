@@ -11,6 +11,7 @@ from datetime import datetime
 import os
 import shutil
 import random
+import seaborn as sns
 
 def copy_files(source_folder, destination_folder, num_files, random_selection=False):
     """
@@ -111,61 +112,76 @@ def process_data(raw_data):
     
     return data
 
-def join_stock_data(folder=r"data/stocks",export = True,axis=True):
+
+from collections import Counter
+
+def join_stock_data(folder=r"data/stocks", export=True):
     """
-    Une los datos de acciones desde múltiples archivos CSV en un único DataFrame.
+    Une los datos de acciones desde múltiples archivos CSV en un único DataFrame,
+    basado en la moda de las fechas para minimizar valores faltantes.
     
     Args:
         folder (str): Ruta al directorio que contiene los archivos CSV de datos de acciones.
         export (bool): Si se debe exportar el DataFrame combinado a un archivo CSV.
-        axis (bool): Si se combinan los datos horizontalmente (True) o verticalmente (False).
         
     Returns:
-        pd.DataFrame: DataFrame con todos los datos combinados.
+        pd.DataFrame: DataFrame con todos los datos combinados, alineado con la moda de fechas.
     """
     all_data = []
-    date_column = None  # Para guardar la columna 'Date' una vez
+    all_dates = []
 
+    # Leer todos los archivos y recolectar fechas
     for stock_data in os.listdir(folder):
         file_path = os.path.join(folder, stock_data)
         df = pd.read_csv(file_path)
 
-        # Guardar solo la primera aparición de 'Date'
+        # Convertir 'Date' a tipo datetime
+        df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
 
+        # Recolectar las fechas únicas para calcular la moda
+        all_dates.append(tuple(sorted(df['Date'].dropna().tolist())))
+
+        # Seleccionar las columnas necesarias
         symbol = os.path.splitext(stock_data)[0]
+        cols = ['AdjustedClose', 'Close', 'High', 'Low', 'Open', 'Volume']
+        df = df[['Date'] + cols]
+        df = df.set_index('Date')  # Usar 'Date' como índice
 
-        if axis: 
-             # Extraer la columna Date una sola vez
-            if date_column is None:
-                date_column = df[['Date']] 
-            cols=['AdjustedClose', 'Close', 'High', 'Low', 'Open', 'Volume']
-            df = df[['Date']+cols]
-            df = df.set_index('Date')  # Usar 'Date' como índice para alineación
+        # Renombrar columnas para identificar cada archivo
+        df.columns = [f'{col}_{symbol}' for col in cols]
 
-            df.columns=[f'{col}_{symbol}' for col in cols]
-            # print(df.columns)
-        else: 
-            df["stock_symbol"] = symbol
-           
-            df = df[['Date', 'AdjustedClose', 'Close', 'High', 'Low', 'Open', 'Volume', 'stock_symbol']]
-       
         all_data.append(df)
-    if axis: 
-            final_dataset = pd.concat(all_data,axis=1 ,ignore_index=False)
-            final_dataset.reset_index(inplace=True)
 
-            if export : 
-                    final_dataset.to_csv(r'data/final_hztal.csv', index=False)
-            return final_dataset
-    else: 
-            final_dataset = pd.concat(all_data, ignore_index=True)
-            # print(final_dataset.head)
-            # print(final_dataset.columns)
-            if export : 
-                final_dataset.to_csv(r'data/final_vtal.csv', index=False)
-            return final_dataset
+    # Calcular la moda de las fechas
+    date_counts = Counter(all_dates)
+    most_common_dates = max(date_counts, key=date_counts.get)  # Fechas con la moda
+    index_moda = pd.to_datetime(most_common_dates)  # Convertir a índice de Pandas
 
-   
+    # Crear el DataFrame final basado en la moda de fechas
+    final_dataset = pd.DataFrame(index=index_moda)
+
+    # Procesar cada archivo para alinear o rellenar según sea necesario
+    for df in all_data:
+        # Reindexar al índice basado en la moda de fechas
+        df = df.reindex(index_moda).fillna(0)
+        final_dataset = pd.concat([final_dataset, df], axis=1)
+
+    # Restablecer el índice para exportar
+    final_dataset.reset_index(inplace=True)
+    final_dataset.rename(columns={'index': 'Date'}, inplace=True)
+
+    # Imprimir valores nulos para verificar
+    null_columns_df2 = final_dataset.isnull().sum()
+    print('Valores Nulos en Horizontal:', null_columns_df2[null_columns_df2 > 0])
+
+    # Exportar a CSV si se solicita
+    if export:
+        final_dataset.to_csv(r'data/final_hztal.csv', index=False)
+
+    return final_dataset
+
+
+
 
 def extract_macroeconomics(series,start_date = "2010-01-01", end_date = "2024-01-31"):
     if series in ['^GSPC','^IXIC','^RUT','^STOXX50E','^FTSE','CL=F','SI=F','GC=F','^HSI','NG=F','ZC=F','EURUSD=X','BTC-USD','HO=F','ZC=F']:
@@ -270,20 +286,20 @@ def get_technical_indicators(group, symbol, vertical=True):
     group = group.sort_values(by='Date')  # Asegúrate de que los datos estén ordenados por fecha
 
     # Generar solo indicadores técnicos
-    df[f'MACD_{symbol}'] = ta.trend.macd(group['Close'])
-    df[f'CCI_{symbol}'] = ta.trend.cci(group['High'], group['Low'], group['Close'], window=20)
-    df[f'ATR_{symbol}'] = ta.volatility.average_true_range(group['High'], group['Low'], group['Close'], window=14)
-    df[f'BOLL_upper_{symbol}'] = ta.volatility.bollinger_hband(group['Close'], window=20)
-    df[f'BOLL_lower_{symbol}'] = ta.volatility.bollinger_lband(group['Close'], window=20)
-    df[f'EMA20_{symbol}'] = ta.trend.ema_indicator(group['Close'], window=20)
-    df[f'MA5_{symbol}'] = group['Close'].rolling(window=5).mean()
-    df[f'MA10_{symbol}'] = group['Close'].rolling(window=10).mean()
-    df[f'MTM6_{symbol}'] = group['Close'].pct_change(periods=6)
-    df[f'MTM12_{symbol}'] = group['Close'].pct_change(periods=12)
-    df[f'ROC_{symbol}'] = ta.momentum.roc(group['Close'], window=12)
-    df[f'SMI_{symbol}'] = ta.momentum.stoch_signal(group['High'], group['Low'], group['Close'], window=14, smooth_window=3)
-    df[f'WVAD_{symbol}'] = ((group['Close'] - group['Open']) / (group['High'] - group['Low']) * group['Volume']).fillna(0)
-    df[f'RSI_{symbol}'] = ta.momentum.rsi(group['Close'], window=20)
+    df[f'MACD_{symbol}'] = ta.trend.macd(group['AdjustedClose'])
+    df[f'CCI_{symbol}'] = ta.trend.cci(group['High'], group['Low'], group['AdjustedClose'], window=20)
+    df[f'ATR_{symbol}'] = ta.volatility.average_true_range(group['High'], group['Low'], group['AdjustedClose'], window=14)
+    df[f'BOLL_upper_{symbol}'] = ta.volatility.bollinger_hband(group['AdjustedClose'], window=20)
+    df[f'BOLL_lower_{symbol}'] = ta.volatility.bollinger_lband(group['AdjustedClose'], window=20)
+    df[f'EMA20_{symbol}'] = ta.trend.ema_indicator(group['AdjustedClose'], window=20)
+    df[f'MA5_{symbol}'] = group['AdjustedClose'].rolling(window=5).mean()
+    df[f'MA10_{symbol}'] = group['AdjustedClose'].rolling(window=10).mean()
+    df[f'MTM6_{symbol}'] = group['AdjustedClose'].pct_change(periods=6)
+    df[f'MTM12_{symbol}'] = group['AdjustedClose'].pct_change(periods=12)
+    df[f'ROC_{symbol}'] = ta.momentum.roc(group['AdjustedClose'], window=12)
+    df[f'SMI_{symbol}'] = ta.momentum.stoch_signal(group['High'], group['Low'], group['AdjustedClose'], window=14, smooth_window=3)
+    df[f'WVAD_{symbol}'] = ((group['AdjustedClose'] - group['Open']) / (group['High'] - group['Low']) * group['Volume']).fillna(0)
+    df[f'RSI_{symbol}'] = ta.momentum.rsi(group['AdjustedClose'], window=20)
 
     # Rellenar datos faltantes
     df.bfill(inplace=True)

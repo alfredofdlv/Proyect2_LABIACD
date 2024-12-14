@@ -3,3 +3,6 @@ plots/
 *.csv
 *.pkl
 *.npy
+*.pyc
+*.jolib
+*.h5
