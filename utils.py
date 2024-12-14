@@ -353,61 +353,62 @@ def join_technical_indicators(database,folder = r"data/stocks", export=True, axi
 
 
 
-def preprocess_and_pca(X_train, X_test, show_plot=True):
+def preprocess_and_pca(X_train, X_test, target_keyword="Close", exclude_keyword="Adjusted", show_plot=True):
     """
-    Performs preprocessing and PCA on a dataset.
+    Realiza la preprocesamiento y PCA en un conjunto de datos.
 
     Args:
-        X_train (DataFrame): Training data.
-        X_test (DataFrame): Testing data.
-        show_plot (bool): If True, displays a plot of cumulative explained variance.
+        X_train (DataFrame): Datos de entrenamiento.
+        X_test (DataFrame): Datos de prueba.
+        show_plot (bool): Si True, muestra un gráfico de varianza explicada acumulada.
 
     Returns:
-        tuple: X_train_pca, X_test, cumulative_variance
+        tuple: X_train_pca, X_test, varianza_acumulada
     """
-    print("Starting preprocessing and PCA...")
+    print("Inicio del preprocesamiento y PCA...")
 
-    # Scale the data
+
+
+    # Escalar los datos
     scaler = StandardScaler()
     X_train = scaler.fit_transform(X_train)
     X_test = scaler.transform(X_test)
 
-    # Compute temporary PCA to determine the required number of components
-    print("Time before PCA:", datetime.now().time())
+    # Calcular PCA temporal para determinar componentes necesarios
+    print("Hora antes del PCA:", datetime.now().time())
     pca_temp = PCA(n_components=0.975)
     pca_temp.fit(X_train)
 
-    # Determine components based on the Kaiser criterion
-    eigenvalues = pca_temp.explained_variance_
-    mean_eigenvalue = np.mean(eigenvalues)
+    # Determinar componentes según el criterio de Kaiser
+    autovalores = pca_temp.explained_variance_
+    media_autovalores = np.mean(autovalores)
 
-    kaiser_cov_criterion = eigenvalues > mean_eigenvalue
-    kaiser_cor_criterion = eigenvalues > 1
-    print(f"Number of components according to Kaiser criterion (covariance): {np.sum(kaiser_cov_criterion)}")
-    print(f"Number of components according to Kaiser criterion (correlation): {np.sum(kaiser_cor_criterion)}")
+    criterio_kaiser_cov = autovalores > media_autovalores
+    criterio_kaiser_cor = autovalores > 1
+    print(f"Número de componentes según criterio de Kaiser (covarianza): {np.sum(criterio_kaiser_cov)}")
+    print(f"Número de componentes según criterio de Kaiser (correlación): {np.sum(criterio_kaiser_cor)}")
 
-    # Apply Incremental PCA with the optimal number of components
-    ipca = IncrementalPCA(n_components=np.sum(kaiser_cor_criterion))
+    # Aplicar Incremental PCA con número óptimo de componentes
+    ipca = IncrementalPCA(n_components=np.sum(criterio_kaiser_cor))
+    # ipca = IncrementalPCA(n_components=3)
 
     X_train_pca = ipca.fit_transform(X_train)
-    X_test      =ipca.transform(X_test)
-    explained_variance = ipca.explained_variance_ratio_
-    cumulative_variance = np.cumsum(explained_variance)
+    varianza_explicada = ipca.explained_variance_ratio_
+    varianza_acumulada = np.cumsum(varianza_explicada)
 
-    print("Time after PCA:", datetime.now().time())
+    print("Hora después del PCA:", datetime.now().time())
 
-    # Display plot if requested
+    # Mostrar gráfico si se solicita
     if show_plot:
         plt.figure(figsize=(8, 5))
-        plt.plot(range(1, len(cumulative_variance) + 1), cumulative_variance, marker='o', linestyle='--')
-        plt.title('Cumulative Explained Variance')
-        plt.xlabel('Number of Principal Components')
-        plt.ylabel('Cumulative Explained Variance')
+        plt.plot(range(1, len(varianza_acumulada) + 1), varianza_acumulada, marker='o', linestyle='--')
+        plt.title('Varianza Explicada Acumulada')
+        plt.xlabel('Número de Componentes Principales')
+        plt.ylabel('Varianza Explicada Acumulada')
         plt.grid(True)
         plt.show()
 
-    return X_train_pca, X_test, cumulative_variance
-
+    return X_train_pca, X_test, varianza_acumulada
 
 def mean_positive_error(y_true, y_pred):
     """
